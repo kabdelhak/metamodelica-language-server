@@ -40,7 +40,7 @@
  */
 
 import * as LSP from 'vscode-languageserver/node';
-import { SyntaxNode } from 'web-tree-sitter';
+import { SyntaxNode, Point } from 'web-tree-sitter';
 
 import { logger } from './logger';
 
@@ -108,6 +108,10 @@ export function range(n: SyntaxNode): LSP.Range {
     n.endPosition.row,
     n.endPosition.column,
   );
+}
+
+export function point(p: LSP.Position): Point {
+  return {row:p.line, column:p.character};
 }
 
 /**

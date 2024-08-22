@@ -50,7 +50,7 @@ import { logger, setLogConnection, setLogLevel } from './util/logger';
  * MetaModelicaServer collection all the important bits and bobs.
  */
 export class MetaModelicaServer {
-  analyzer: Analyzer;
+  #analyzer: Analyzer;
   private clientCapabilities: LSP.ClientCapabilities;
   private connection: LSP.Connection;
   private documents: LSP.TextDocuments<TextDocument> = new LSP.TextDocuments(TextDocument);
@@ -60,7 +60,7 @@ export class MetaModelicaServer {
     clientCapabilities: LSP.ClientCapabilities,
     connection: LSP.Connection
   ) {
-    this.analyzer = analyzer;
+    this.#analyzer = analyzer;
     this.clientCapabilities = clientCapabilities;
     this.connection = connection;
   }
@@ -91,6 +91,8 @@ export class MetaModelicaServer {
     return {
       textDocumentSync: LSP.TextDocumentSyncKind.Full,
       completionProvider: undefined,
+      declarationProvider: true,
+      definitionProvider: true,
       hoverProvider: false,
       signatureHelpProvider: undefined,
       documentSymbolProvider: true,
@@ -113,6 +115,8 @@ export class MetaModelicaServer {
     this.documents.listen(this.connection);
 
     connection.onDocumentSymbol(this.onDocumentSymbol.bind(this));
+    connection.onDeclaration(this.onDeclaration.bind(this));
+    connection.onDefinition(this.onDefinition.bind(this));
 
     connection.onInitialized(async () => {
       initialized = true;
@@ -145,7 +149,7 @@ export class MetaModelicaServer {
    */
   private async analyzeDocument(document: TextDocument) {
     const { uri } = document;
-    const diagnostics = this.analyzer.analyze(document);
+    const diagnostics = this.#analyzer.analyze(document);
 
     this.connection.sendDiagnostics({uri, diagnostics});
   }
@@ -158,7 +162,31 @@ export class MetaModelicaServer {
    */
   private onDocumentSymbol(params: LSP.DocumentSymbolParams): LSP.DocumentSymbol[] {
     logger.debug(`onDocumentSymbol`);
-    return this.analyzer.getDeclarationsForUri(params.textDocument.uri);
+    return this.#analyzer.getDeclarationsForUri(params.textDocument.uri);
+  }
+
+  private async onDeclaration(params: LSP.DeclarationParams): Promise<LSP.LocationLink[]> {
+    const locationLinks = await this.#analyzer.findDeclaration(
+      params.textDocument.uri,
+      params.position,
+    );
+    if (locationLinks == null) {
+      return [];
+    }
+
+    return locationLinks;
+  }
+
+  private async onDefinition(params: LSP.DefinitionParams): Promise<LSP.LocationLink[]> {
+    const locationLinks = await this.#analyzer.findDeclaration(
+      params.textDocument.uri,
+      params.position,
+    );
+    if (locationLinks == null) {
+      return [];
+    }
+
+    return locationLinks;
   }
 
 }

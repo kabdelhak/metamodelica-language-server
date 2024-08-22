@@ -47,6 +47,7 @@ import Parser from 'web-tree-sitter';
 import { getAllDeclarationsInTree } from './util/declarations';
 import { getDiagnosticsFromTree } from './util/diagnostics';
 import { logger } from './util/logger';
+import { point } from './util/tree-sitter';
 
 type AnalyzedDocument = {
   document: TextDocument,
@@ -158,4 +159,76 @@ export default class Analyzer {
 
     return getAllDeclarationsInTree(tree, this.queries,);
   }
+
+  /**
+   * Finds the position of the declaration of the symbol at the given position.
+   *
+   * @param uri the opened document
+   * @param position the cursor position
+   * @returns a {@link LSP.LocationLink} to the symbol's declaration, or `null`
+   *     if not found.
+   */
+  public async findDeclaration(
+    uri: LSP.DocumentUri,
+    position: LSP.Position,
+  ): Promise<LSP.LocationLink[] | null> {
+    
+    const doc = this.uriToAnalyzedDocument[uri];
+    if(!doc){
+      return null;
+    }
+    logger.debug('after null check');
+
+    const node = doc.tree.rootNode.descendantForPosition(point(position));
+    logger.debug(node.text);
+
+    const name = "NBAdjacency.Matrix.toString";
+    const res = this.traverseDocumentSymbols(name.split('.'), doc.declarations);
+
+    if(!res){
+      return null;
+    }
+
+    logger.debug('after filter' + res);
+
+    const names:LSP.LocationLink[] = [];
+
+    for(const symb of res){
+      logger.debug('loop' + symb);
+
+      const link = LSP.LocationLink.create(uri, symb.range, symb.selectionRange);
+      names.push(link);
+    }
+    logger.debug('finale');
+
+    return names; 
+  }
+
+  protected traverseDocumentSymbols(
+    names : string[],
+    documentSymbols : LSP.DocumentSymbol[]
+  ):LSP.DocumentSymbol[] | null{
+    const res = documentSymbols.filter(decl => decl.name == names[0]);
+
+    if(!res || res.length == 0){
+      return null;
+    }
+
+    if(names.length == 1){
+      return res;
+    }
+
+    const symbols : LSP.DocumentSymbol[] = []; 
+    for(const decl of res){
+      if(decl.children){
+        const list = this.traverseDocumentSymbols(names.slice(1,names.length), decl.children);
+
+        if(list){
+          symbols.push(...list);
+        }
+      }
+    }
+    return symbols;
+  }
+
 }
